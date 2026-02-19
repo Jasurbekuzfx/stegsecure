@@ -1,5 +1,3 @@
 Flask
 stegano
-Pillow
-cryptography
-gunicorn
+pillow
