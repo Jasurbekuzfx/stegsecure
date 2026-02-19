@@ -1,161 +1,51 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>StegSecure</title>
-
-<style>
-body{
-background:linear-gradient(135deg,#020617,#0f172a);
-color:white;
-font-family:Arial;
-margin:0;
-}
-
-.container{
-max-width:900px;
-margin:auto;
-padding:20px;
-}
-
-h1{
-text-align:center;
-color:#38bdf8;
-text-shadow:0 0 10px #38bdf8;
-}
-
-.grid{
-display:grid;
-gap:20px;
-}
-
-.card{
-background:rgba(15,23,42,0.7);
-border:1px solid #38bdf8;
-border-radius:14px;
-padding:20px;
-box-shadow:0 0 15px #38bdf855;
-backdrop-filter:blur(10px);
-}
-
-input,button{
-width:100%;
-padding:12px;
-margin-top:10px;
-border-radius:10px;
-border:none;
-}
-
-input{
-background:#020617;
-color:white;
-border:1px solid #38bdf8;
-}
-
-button{
-background:#38bdf8;
-color:black;
-font-weight:bold;
-cursor:pointer;
-}
-
-button:hover{
-box-shadow:0 0 15px #38bdf8;
-}
-
-@media(min-width:700px){
-.grid{
-grid-template-columns:1fr 1fr;
-}
-}
-</style>
+<title>StegSecure PRO</title>
+<link rel="stylesheet" href="/static/style.css">
 </head>
-
 <body>
+
+<h1 class="title">🔐 StegSecure PRO</h1>
+
 <div class="container">
 
-<h1>🔐 StegSecure</h1>
-
-<div class="grid">
-
 <div class="card">
-<h2>Hide Secret</h2>
-<form action="/embed" method="post" enctype="multipart/form-data">
-<input type="file" name="image" required>
+<h2>🖼 Rasmga yashirish</h2>
+<form action="/embed" method="POST" enctype="multipart/form-data">
+<input type="file" name="image">
 <input type="text" name="secret" placeholder="Secret text">
 <input type="password" name="password" placeholder="Password">
-<button>CREATE</button>
+<button>Yashirish</button>
 </form>
 </div>
 
 <div class="card">
-<h2>Extract Secret</h2>
-<form action="/extract" method="post" enctype="multipart/form-data">
-<input type="file" name="image" required>
+<h2>🔎 Rasm extract</h2>
+<form action="/extract" method="POST" enctype="multipart/form-data">
+<input type="file" name="image">
 <input type="password" name="password" placeholder="Password">
-<button>EXTRACT</button>
+<button>Ochish</button>
 </form>
 </div>
 
+<div class="card">
+<h2>🎧 Audio yashirish</h2>
+<form action="/audio_embed" method="POST" enctype="multipart/form-data">
+<input type="file" name="audio">
+<input type="text" name="secret" placeholder="Secret">
+<button>Audio Hide</button>
+</form>
 </div>
+
+<div class="card">
+<h2>🎧 Audio extract</h2>
+<form action="/audio_extract" method="POST" enctype="multipart/form-data">
+<input type="file" name="audio">
+<button>Audio Open</button>
+</form>
+</div>
+
 </div>
 </body>
 </html>
-<div class="card">
-<h2>🎧 Hide Secret in Audio</h2>
-
-<input type="file" id="audioInput">
-<audio id="player" controls style="width:100%;margin-top:10px;"></audio>
-
-<input type="text" id="audioSecret" placeholder="Secret text">
-
-<button onclick="sendAudio()">CREATE AUDIO</button>
-</div>
-
-<div class="card">
-<h2>🔊 Extract Audio Secret</h2>
-
-<input type="file" id="audioExtract">
-<button onclick="extractAudio()">EXTRACT AUDIO</button>
-
-<div id="result" style="margin-top:10px;"></div>
-</div>
-
-<script>
-function sendAudio(){
-let file=document.getElementById("audioInput").files[0];
-let secret=document.getElementById("audioSecret").value;
-
-let form=new FormData();
-form.append("audio",file);
-form.append("secret",secret);
-
-fetch("/embed_audio",{method:"POST",body:form})
-.then(r=>r.blob())
-.then(blob=>{
-let url=URL.createObjectURL(blob);
-let a=document.createElement("a");
-a.href=url;
-a.download="steg_audio.wav";
-a.click();
-});
-}
-
-function extractAudio(){
-let file=document.getElementById("audioExtract").files[0];
-let form=new FormData();
-form.append("audio",file);
-
-fetch("/extract_audio",{method:"POST",body:form})
-.then(r=>r.text())
-.then(t=>{
-document.getElementById("result").innerHTML=t;
-});
-}
-
-document.getElementById("audioInput").onchange=function(e){
-let url=URL.createObjectURL(e.target.files[0]);
-document.getElementById("player").src=url;
-}
-</script>
-
