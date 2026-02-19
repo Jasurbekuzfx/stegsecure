@@ -1,99 +1,130 @@
 from flask import Flask, render_template, request, send_file
+from stegano import lsb
 from PIL import Image
 import os
-import uuid
+import wave
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-
-# 🔐 TEXTNI BITLARGA O'TKAZISH
-def text_to_bin(text):
-    return ''.join(format(ord(i), '08b') for i in text)
-
-
-# 🔓 BITLARNI TEXTGA QAYTARISH
-def bin_to_text(binary):
-    chars = [binary[i:i+8] for i in range(0, len(binary), 8)]
-    text = ""
-    for c in chars:
-        if c == "11111111":  # END MARK
-            break
-        text += chr(int(c, 2))
-    return text
-
-
+# =========================
+# HOME
+# =========================
 @app.route("/")
 def home():
     return render_template("index.html")
 
-
-# 🧩 SECRETNI RASMGA YOZISH
-@app.route("/embed", methods=["POST"])
+# =========================
+# IMAGE EMBED
+# =========================
+@app.route("/embed", methods=["GET","POST"])
 def embed():
-    file = request.files["image"]
-    secret = request.form["secret"]
+    if request.method == "POST":
+        file = request.files["image"]
+        secret = request.form["secret"]
 
-    filename = str(uuid.uuid4()) + ".png"
-    path = os.path.join(UPLOAD_FOLDER, filename)
+        path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(path)
 
-    img = Image.open(file).convert("RGB")
-    pixels = list(img.getdata())
+        output = os.path.join(UPLOAD_FOLDER, "secret_image.png")
 
-    binary_secret = text_to_bin(secret) + "11111111"
-    data_index = 0
+        secret_img = lsb.hide(path, secret)
+        secret_img.save(output)
 
-    new_pixels = []
+        return send_file(output, as_attachment=True)
 
-    for pixel in pixels:
-        r, g, b = pixel
+    return render_template("embed.html")
 
-        if data_index < len(binary_secret):
-            r = (r & ~1) | int(binary_secret[data_index])
-            data_index += 1
+# =========================
+# IMAGE EXTRACT
+# =========================
+@app.route("/extract", methods=["GET","POST"])
+def extract():
+    if request.method == "POST":
+        file = request.files["image"]
 
-        if data_index < len(binary_secret):
-            g = (g & ~1) | int(binary_secret[data_index])
-            data_index += 1
+        path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(path)
 
-        if data_index < len(binary_secret):
-            b = (b & ~1) | int(binary_secret[data_index])
-            data_index += 1
+        msg = lsb.reveal(path)
 
-        new_pixels.append((r, g, b))
+        return f"Yashirin xabar: {msg}"
 
-    img.putdata(new_pixels)
-    img.save(path
-@app.route("/embed_audio", methods=["POST"])
-def embed_audio():
-    file = request.files["audio"]
-    secret = request.form["secret"]
+    return render_template("extract.html")
 
-    filename = str(uuid.uuid4()) + ".wav"
-    path = os.path.join(UPLOAD_FOLDER, filename)
+# =========================
+# AUDIO EMBED (WAV ONLY)
+# =========================
+@app.route("/audio_embed", methods=["GET","POST"])
+def audio_embed():
+    if request.method == "POST":
+        file = request.files["audio"]
+        secret = request.form["secret"]
 
-    audio_bytes = file.read()
-    marker = b"STEGAUDIO:"
+        path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(path)
 
-    new_audio = audio_bytes + marker + secret.encode()
+        song = wave.open(path, mode='rb')
+        frame_bytes = bytearray(list(song.readframes(song.getnframes())))
 
-    with open(path, "wb") as f:
-        f.write(new_audio)
+        secret = secret + "###END###"
+        bits = ''.join([format(ord(i), '08b') for i in secret])
 
-    return send_file(path, as_attachment=True)
+        for i in range(len(bits)):
+            frame_bytes[i] = (frame_bytes[i] & 254) | int(bits[i])
 
+        output = os.path.join(UPLOAD_FOLDER, "secret_audio.wav")
 
-@app.route("/extract_audio", methods=["POST"])
-def extract_audio():
-    file = request.files["audio"]
+        new_audio = wave.open(output, 'wb')
+        new_audio.setparams(song.getparams())
+        new_audio.writeframes(bytes(frame_bytes))
+        new_audio.close()
+        song.close()
 
-    audio_bytes = file.read()
-    marker = b"STEGAUDIO:"
+        return send_file(output, as_attachment=True)
 
-    if marker in audio_bytes:
-        secret = audio_bytes.split(marker)[-1].decode(errors="ignore")
-        return f"<h2>🔓 Secret: {secret}</h2>"
+    return render_template("audio_embed.html")
 
-    return "<h2>❌ Secret topilmadi</h2>"
+# =========================
+# AUDIO EXTRACT
+# =========================
+@app.route("/audio_extract", methods=["GET","POST"])
+def audio_extract():
+    if request.method == "POST":
+        file = request.files["audio"]
+
+        path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(path)
+
+        song = wave.open(path, mode='rb')
+        frame_bytes = bytearray(list(song.readframes(song.getnframes())))
+
+        extracted = [frame_bytes[i] & 1 for i in range(len(frame_bytes))]
+        chars = []
+
+        for i in range(0, len(extracted), 8):
+            byte = extracted[i:i+8]
+            chars.append(chr(int(''.join(map(str, byte)), 2)))
+
+        message = ''.join(chars)
+        hidden = message.split("###END###")[0]
+
+        return f"Yashirin audio xabar: {hidden}"
+
+    return render_template("audio_extract.html")
+
+# =========================
+# ERROR DEBUG
+# =========================
+@app.errorhandler(Exception)
+def handle_error(e):
+    return f"XATOLIK: {str(e)}"
+
+# =========================
+# RENDER PORT
+# =========================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
