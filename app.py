@@ -1,71 +1,99 @@
 from flask import Flask, render_template, request, send_file
-import subprocess, os
+from PIL import Image
+import os
+import uuid
 
 app = Flask(__name__)
+
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+# 🔐 TEXTNI BITLARGA O'TKAZISH
+def text_to_bin(text):
+    return ''.join(format(ord(i), '08b') for i in text)
+
+
+# 🔓 BITLARNI TEXTGA QAYTARISH
+def bin_to_text(binary):
+    chars = [binary[i:i+8] for i in range(0, len(binary), 8)]
+    text = ""
+    for c in chars:
+        if c == "11111111":  # END MARK
+            break
+        text += chr(int(c, 2))
+    return text
+
 
 @app.route("/")
 def home():
     return render_template("index.html")
 
+
+# 🧩 SECRETNI RASMGA YOZISH
 @app.route("/embed", methods=["POST"])
 def embed():
-    image = request.files["image"]
+    file = request.files["image"]
     secret = request.form["secret"]
-    password = request.form["password"]
 
-    img_path = os.path.join(UPLOAD_FOLDER, image.filename)
-    image.save(img_path)
+    filename = str(uuid.uuid4()) + ".png"
+    path = os.path.join(UPLOAD_FOLDER, filename)
 
-    secret_file = os.path.join(UPLOAD_FOLDER,"secret.txt")
-    with open(secret_file,"w") as f:
-        f.write(secret)
+    img = Image.open(file).convert("RGB")
+    pixels = list(img.getdata())
 
-    subprocess.run([
-        "steghide.exe","embed",
-        "-cf",img_path,
-        "-ef",secret_file,
-        "-p",password,
-        "-f"
-    ])
+    binary_secret = text_to_bin(secret) + "11111111"
+    data_index = 0
 
-    return send_file(img_path,as_attachment=True)
+    new_pixels = []
 
-@app.route("/extract", methods=["POST"])
-def extract():
-    image = request.files["image"]
-    password = request.form["password"]
+    for pixel in pixels:
+        r, g, b = pixel
 
-    img_path = os.path.join(UPLOAD_FOLDER, image.filename)
-    image.save(img_path)
+        if data_index < len(binary_secret):
+            r = (r & ~1) | int(binary_secret[data_index])
+            data_index += 1
 
-    secret_file = os.path.join(UPLOAD_FOLDER,"secret.txt")
+        if data_index < len(binary_secret):
+            g = (g & ~1) | int(binary_secret[data_index])
+            data_index += 1
 
-    subprocess.run([
-        "steghide.exe","extract",
-        "-sf",img_path,
-        "-p",password,
-        "-xf",secret_file,
-        "-f"
-    ])
+        if data_index < len(binary_secret):
+            b = (b & ~1) | int(binary_secret[data_index])
+            data_index += 1
 
-    if os.path.exists(secret_file):
-        return send_file(secret_file,as_attachment=True)
+        new_pixels.append((r, g, b))
 
-    return "Secret topilmadi"
+    img.putdata(new_pixels)
+    img.save(path
+@app.route("/embed_audio", methods=["POST"])
+def embed_audio():
+    file = request.files["audio"]
+    secret = request.form["secret"]
 
-    if os.path.exists("secret.txt"):
-        return send_file("secret.txt",as_attachment=True)
+    filename = str(uuid.uuid4()) + ".wav"
+    path = os.path.join(UPLOAD_FOLDER, filename)
 
-    return "Secret topilmadi"
+    audio_bytes = file.read()
+    marker = b"STEGAUDIO:"
 
-import os
+    new_audio = audio_bytes + marker + secret.encode()
 
+    with open(path, "wb") as f:
+        f.write(new_audio)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    return send_file(path, as_attachment=True)
 
 
+@app.route("/extract_audio", methods=["POST"])
+def extract_audio():
+    file = request.files["audio"]
 
+    audio_bytes = file.read()
+    marker = b"STEGAUDIO:"
 
+    if marker in audio_bytes:
+        secret = audio_bytes.split(marker)[-1].decode(errors="ignore")
+        return f"<h2>🔓 Secret: {secret}</h2>"
+
+    return "<h2>❌ Secret topilmadi</h2>"
