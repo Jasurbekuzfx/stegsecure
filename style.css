@@ -1,0 +1,61 @@
+body{
+background:#050b16;
+font-family:Arial;
+color:white;
+text-align:center;
+animation:bg 10s infinite alternate;
+}
+
+@keyframes bg{
+0%{background:#050b16;}
+100%{background:#081b3a;}
+}
+
+.title{
+font-size:40px;
+margin:20px;
+animation:glow 2s infinite alternate;
+}
+
+@keyframes glow{
+from{color:#fff;}
+to{color:#00e1ff;text-shadow:0 0 20px #00e1ff;}
+}
+
+.container{
+display:flex;
+flex-wrap:wrap;
+justify-content:center;
+}
+
+.card{
+background:#0e1a2b;
+padding:20px;
+margin:15px;
+border-radius:15px;
+width:260px;
+box-shadow:0 0 15px #00e1ff33;
+transition:0.3s;
+}
+
+.card:hover{
+transform:scale(1.05);
+box-shadow:0 0 25px #00e1ff;
+}
+
+input{
+width:90%;
+margin:5px;
+padding:8px;
+background:#09101c;
+border:none;
+color:white;
+}
+
+button{
+background:#00e1ff;
+border:none;
+padding:10px;
+margin-top:5px;
+cursor:pointer;
+}
