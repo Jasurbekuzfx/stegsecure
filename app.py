@@ -1,169 +1,145 @@
 from flask import Flask, render_template, request, send_file
 from stegano import lsb
 from PIL import Image
-from cryptography.fernet import Fernet
-import os
-import wave
-import base64
-import hashlib
+import os, wave, base64
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# =========================
-# 🔐 PASSWORD → AES KEY
-# =========================
-def make_key(password):
-    key = hashlib.sha256(password.encode()).digest()
-    return base64.urlsafe_b64encode(key)
+# ======================
+# SIMPLE ENCRYPT
+# ======================
+def encrypt(text, key):
+    if key == "":
+        return text
+    return base64.b64encode((key+text).encode()).decode()
 
-def encrypt(text, password):
-    f = Fernet(make_key(password))
-    return f.encrypt(text.encode()).decode()
+def decrypt(text, key):
+    try:
+        decoded = base64.b64decode(text).decode()
+        if decoded.startswith(key):
+            return decoded[len(key):]
+    except:
+        pass
+    return "Parol noto‘g‘ri!"
 
-def decrypt(text, password):
-    f = Fernet(make_key(password))
-    return f.decrypt(text.encode()).decode()
-
-# =========================
+# ======================
 # HOME
-# =========================
+# ======================
 @app.route("/")
 def home():
     return render_template("index.html")
 
-# =========================
-# 🖼 IMAGE EMBED
-# =========================
-@app.route("/embed", methods=["GET","POST"])
+# ======================
+# IMAGE EMBED
+# ======================
+@app.route("/embed", methods=["POST"])
 def embed():
-    if request.method == "POST":
-        file = request.files["image"]
-        secret = request.form["secret"]
-        password = request.form["password"]
 
-        enc = encrypt(secret, password)
+    file = request.files.get("image")
+    secret = request.form.get("secret","")
+    password = request.form.get("password","")
 
-        path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(path)
+    if not file:
+        return "Rasm yuklanmadi"
 
-        output = os.path.join(UPLOAD_FOLDER, "secret_image.png")
+    enc = encrypt(secret,password)
 
-        img = lsb.hide(path, enc)
-        img.save(output)
+    path = os.path.join(UPLOAD_FOLDER,file.filename)
+    file.save(path)
 
-        return send_file(output, as_attachment=True)
+    output = os.path.join(UPLOAD_FOLDER,"secret.png")
 
-    return render_template("embed.html")
+    img = lsb.hide(path,enc)
+    img.save(output)
 
-# =========================
-# 🖼 IMAGE EXTRACT
-# =========================
-@app.route("/extract", methods=["GET","POST"])
+    return send_file(output,as_attachment=True)
+
+# ======================
+# IMAGE EXTRACT
+# ======================
+@app.route("/extract", methods=["POST"])
 def extract():
-    if request.method == "POST":
-        file = request.files["image"]
-        password = request.form["password"]
 
-        path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(path)
+    file = request.files.get("image")
+    password = request.form.get("password","")
 
-        hidden = lsb.reveal(path)
+    path = os.path.join(UPLOAD_FOLDER,file.filename)
+    file.save(path)
 
-        if hidden:
-            try:
-                msg = decrypt(hidden, password)
-            except:
-                msg = "❌ Parol noto‘g‘ri"
+    msg = lsb.reveal(path)
 
-            return f"Yashirin xabar: {msg}"
+    return decrypt(msg,password)
 
-        return "Xabar topilmadi"
-
-    return render_template("extract.html")
-
-# =========================
-# 🔊 AUDIO EMBED (WAV)
-# =========================
-@app.route("/audio_embed", methods=["GET","POST"])
+# ======================
+# AUDIO EMBED
+# ======================
+@app.route("/audio_embed", methods=["POST"])
 def audio_embed():
-    if request.method == "POST":
-        file = request.files["audio"]
-        secret = request.form["secret"]
-        password = request.form["password"]
 
-        enc = encrypt(secret, password) + "###END###"
+    file = request.files.get("audio")
+    secret = request.form.get("secret","")
 
-        path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(path)
+    path = os.path.join(UPLOAD_FOLDER,file.filename)
+    file.save(path)
 
-        song = wave.open(path, mode='rb')
-        frame_bytes = bytearray(list(song.readframes(song.getnframes())))
+    song = wave.open(path,mode='rb')
+    frame_bytes = bytearray(list(song.readframes(song.getnframes())))
 
-        bits = ''.join([format(ord(i), '08b') for i in enc])
+    secret = secret+"###END###"
+    bits = ''.join([format(ord(i),'08b') for i in secret])
 
-        for i in range(len(bits)):
-            if i < len(frame_bytes):
-                frame_bytes[i] = (frame_bytes[i] & 254) | int(bits[i])
+    for i in range(len(bits)):
+        frame_bytes[i] = (frame_bytes[i] & 254) | int(bits[i])
 
-        output = os.path.join(UPLOAD_FOLDER, "secret_audio.wav")
+    output = os.path.join(UPLOAD_FOLDER,"secret_audio.wav")
 
-        new_audio = wave.open(output, 'wb')
-        new_audio.setparams(song.getparams())
-        new_audio.writeframes(bytes(frame_bytes))
-        new_audio.close()
-        song.close()
+    new_audio = wave.open(output,'wb')
+    new_audio.setparams(song.getparams())
+    new_audio.writeframes(bytes(frame_bytes))
+    new_audio.close()
+    song.close()
 
-        return send_file(output, as_attachment=True)
+    return send_file(output,as_attachment=True)
 
-    return render_template("audio_embed.html")
-
-# =========================
-# 🔊 AUDIO EXTRACT
-# =========================
-@app.route("/audio_extract", methods=["GET","POST"])
+# ======================
+# AUDIO EXTRACT
+# ======================
+@app.route("/audio_extract", methods=["POST"])
 def audio_extract():
-    if request.method == "POST":
-        file = request.files["audio"]
-        password = request.form["password"]
 
-        path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(path)
+    file = request.files.get("audio")
 
-        song = wave.open(path, mode='rb')
-        frame_bytes = bytearray(list(song.readframes(song.getnframes())))
+    path = os.path.join(UPLOAD_FOLDER,file.filename)
+    file.save(path)
 
-        extracted = [frame_bytes[i] & 1 for i in range(len(frame_bytes))]
-        chars = []
+    song = wave.open(path,mode='rb')
+    frame_bytes = bytearray(list(song.readframes(song.getnframes())))
 
-        for i in range(0, len(extracted), 8):
-            byte = extracted[i:i+8]
-            chars.append(chr(int(''.join(map(str, byte)), 2)))
+    extracted = [frame_bytes[i] & 1 for i in range(len(frame_bytes))]
+    chars=[]
 
-        message = ''.join(chars)
-        hidden = message.split("###END###")[0]
+    for i in range(0,len(extracted),8):
+        byte = extracted[i:i+8]
+        chars.append(chr(int(''.join(map(str,byte)),2)))
 
-        try:
-            msg = decrypt(hidden, password)
-        except:
-            msg = "❌ Parol noto‘g‘ri"
+    message=''.join(chars)
+    hidden = message.split("###END###")[0]
 
-        return f"Yashirin audio xabar: {msg}"
+    return hidden
 
-    return render_template("audio_extract.html")
-
-# =========================
-# ERROR HANDLER (PRO)
-# =========================
+# ======================
+# ERROR HANDLER
+# ======================
 @app.errorhandler(Exception)
 def error(e):
-    return f"🚨 SERVER XATOLIK: {str(e)}"
+    return f"XATOLIK: {str(e)}"
 
-# =========================
-# RENDER SERVER
-# =========================
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+# ======================
+# RENDER PORT
+# ======================
+if __name__=="__main__":
+    port=int(os.environ.get("PORT",10000))
+    app.run(host="0.0.0.0",port=port)
