@@ -101,3 +101,61 @@ grid-template-columns:1fr 1fr;
 </div>
 </body>
 </html>
+<div class="card">
+<h2>🎧 Hide Secret in Audio</h2>
+
+<input type="file" id="audioInput">
+<audio id="player" controls style="width:100%;margin-top:10px;"></audio>
+
+<input type="text" id="audioSecret" placeholder="Secret text">
+
+<button onclick="sendAudio()">CREATE AUDIO</button>
+</div>
+
+<div class="card">
+<h2>🔊 Extract Audio Secret</h2>
+
+<input type="file" id="audioExtract">
+<button onclick="extractAudio()">EXTRACT AUDIO</button>
+
+<div id="result" style="margin-top:10px;"></div>
+</div>
+
+<script>
+function sendAudio(){
+let file=document.getElementById("audioInput").files[0];
+let secret=document.getElementById("audioSecret").value;
+
+let form=new FormData();
+form.append("audio",file);
+form.append("secret",secret);
+
+fetch("/embed_audio",{method:"POST",body:form})
+.then(r=>r.blob())
+.then(blob=>{
+let url=URL.createObjectURL(blob);
+let a=document.createElement("a");
+a.href=url;
+a.download="steg_audio.wav";
+a.click();
+});
+}
+
+function extractAudio(){
+let file=document.getElementById("audioExtract").files[0];
+let form=new FormData();
+form.append("audio",file);
+
+fetch("/extract_audio",{method:"POST",body:form})
+.then(r=>r.text())
+.then(t=>{
+document.getElementById("result").innerHTML=t;
+});
+}
+
+document.getElementById("audioInput").onchange=function(e){
+let url=URL.createObjectURL(e.target.files[0]);
+document.getElementById("player").src=url;
+}
+</script>
+
