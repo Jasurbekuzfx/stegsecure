@@ -1,3 +1,5 @@
-flask
-pillow
+Flask
 stegano
+Pillow
+cryptography
+gunicorn
